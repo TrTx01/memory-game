@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Match Pro</title>
+    <style>
+        :root {
+            --card-color: #2c3e50;
+            --match-color: #27ae60;
+            --bg-color: #ecf0f1;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        .card {
+            aspect-ratio: 1 / 1;
+            background-color: var(--card-color);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: transparent;
+            cursor: pointer;
+            transition: transform 0.3s, background-color 0.3s;
+            user-select: none;
+        }
+
+        .card.flipped {
+            background-color: #fff;
+            color: #000;
+            transform: rotateY(180deg);
+        }
+
+        .card.matched {
+            background-color: var(--match-color);
+            color: white;
+            cursor: default;
+        }
+
+        h1 { color: #34495e; }
+        .stats { margin-bottom: 20px; font-weight: bold; }
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            border: none;
+            background: #3498db;
+            color: white;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Memory Match</h1>
+    <div class="stats">Moves: <span id="moves">0</span></div>
+    <div class="grid" id="gameGrid"></div>
+    <button onclick="resetGame()">Restart Game</button>
+
+    <script>
+        const icons = ['🍎', '🍌', '🍇', '🍓', '🍒', '🍍', '🥝', '🍉'];
+        let cards = [...icons, ...icons];
+        let flippedCards = [];
+        let matchedCount = 0;
+        let moves = 0;
+
+        function shuffle(array) {
+            return array.sort(() => Math.random() - 0.5);
+        }
+
+        function createBoard() {
+            const grid = document.getElementById('gameGrid');
+            grid.innerHTML = '';
+            shuffle(cards).forEach((icon, index) => {
+                const card = document.createElement('div');
+                card.classList.add('card');
+                card.dataset.icon = icon;
+                card.dataset.index = index;
+                card.addEventListener('click', flipCard);
+                grid.appendChild(card);
+            });
+        }
+
+        function flipCard() {
+            if (flippedCards.length < 2 && !this.classList.contains('flipped')) {
+                this.classList.add('flipped');
+                this.textContent = this.dataset.icon;
+                flippedCards.push(this);
+
+                if (flippedCards.length === 2) {
+                    moves++;
+                    document.getElementById('moves').textContent = moves;
+                    checkMatch();
+                }
+            }
+        }
+
+        function checkMatch() {
+            const [card1, card2] = flippedCards;
+            if (card1.dataset.icon === card2.dataset.icon) {
+                card1.classList.add('matched');
+                card2.classList.add('matched');
+                matchedCount += 2;
+                flippedCards = [];
+                if (matchedCount === cards.length) alert('You won in ' + moves + ' moves!');
+            } else {
+                setTimeout(() => {
+                    card1.classList.remove('flipped');
+                    card2.classList.remove('flipped');
+                    card1.textContent = '';
+                    card2.textContent = '';
+                    flippedCards = [];
+                }, 1000);
+            }
+        }
+
+        function resetGame() {
+            moves = 0;
+            matchedCount = 0;
+            document.getElementById('moves').textContent = moves;
+            createBoard();
+        }
+
+        createBoard();
+    </script>
+</body>
+</html>
