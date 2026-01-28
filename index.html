@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memory Match Pro</title>
+    <title>Memory Match Pro - Family Edition</title>
     <style>
         :root {
             --card-color: #2c3e50;
             --match-color: #27ae60;
             --bg-color: #ecf0f1;
+            --accent: #3498db;
         }
 
         body {
@@ -17,8 +18,25 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin: 0;
             padding: 20px;
+        }
+
+        /* Controls Section */
+        .controls {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .mode-toggle { margin-bottom: 10px; }
+        
+        #uploadSection { 
+            display: none; 
+            margin-top: 10px;
+            font-size: 0.9rem;
         }
 
         .grid {
@@ -37,33 +55,39 @@
             align-items: center;
             justify-content: center;
             font-size: 2rem;
-            color: transparent;
             cursor: pointer;
-            transition: transform 0.3s, background-color 0.3s;
-            user-select: none;
+            transition: transform 0.4s;
+            transform-style: preserve-3d;
+            position: relative;
+        }
+
+        .card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 8px;
+            display: none;
         }
 
         .card.flipped {
             background-color: #fff;
-            color: #000;
             transform: rotateY(180deg);
         }
 
+        .card.flipped .icon-text, 
+        .card.flipped img { display: block; }
+
         .card.matched {
             background-color: var(--match-color);
-            color: white;
             cursor: default;
         }
 
-        h1 { color: #34495e; }
-        .stats { margin-bottom: 20px; font-weight: bold; }
         button {
-            margin-top: 20px;
-            padding: 10px 20px;
-            font-size: 1rem;
+            margin-top: 10px;
+            padding: 8px 15px;
             cursor: pointer;
             border: none;
-            background: #3498db;
+            background: var(--accent);
             color: white;
             border-radius: 5px;
         }
@@ -72,16 +96,59 @@
 <body>
 
     <h1>Memory Match</h1>
-    <div class="stats">Moves: <span id="moves">0</span></div>
+    
+    <div class="controls">
+        <div class="mode-toggle">
+            <label>
+                <input type="checkbox" id="modeSwitch" onchange="toggleMode()"> Family Mode
+            </label>
+        </div>
+        
+        <div id="uploadSection">
+            <p>Upload 8 family photos:</p>
+            <input type="file" id="imageUpload" accept="image/*" multiple onchange="handleUpload(event)">
+        </div>
+
+        <div class="stats">Moves: <span id="moves">0</span></div>
+        <button onclick="resetGame()">Restart Game</button>
+    </div>
+
     <div class="grid" id="gameGrid"></div>
-    <button onclick="resetGame()">Restart Game</button>
 
     <script>
-        const icons = ['🍎', '🍌', '🍇', '🍓', '🍒', '🍍', '🥝', '🍉'];
-        let cards = [...icons, ...icons];
+        const defaultIcons = ['🍎', '🍌', '🍇', '🍓', '🍒', '🍍', '🥝', '🍉'];
+        let familyImages = [];
+        let currentMode = 'classic';
+        
+        let cards = [];
         let flippedCards = [];
         let matchedCount = 0;
         let moves = 0;
+
+        function toggleMode() {
+            const isFamily = document.getElementById('modeSwitch').checked;
+            currentMode = isFamily ? 'family' : 'classic';
+            document.getElementById('uploadSection').style.display = isFamily ? 'block' : 'none';
+            resetGame();
+        }
+
+        function handleUpload(event) {
+            const files = event.target.files;
+            if (files.length !== 8) {
+                alert("Please select exactly 8 images!");
+                return;
+            }
+
+            familyImages = [];
+            Array.from(files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    familyImages.push(e.target.result);
+                    if (familyImages.length === 8) resetGame();
+                };
+                reader.readAsDataURL(file);
+            });
+        }
 
         function shuffle(array) {
             return array.sort(() => Math.random() - 0.5);
@@ -90,11 +157,30 @@
         function createBoard() {
             const grid = document.getElementById('gameGrid');
             grid.innerHTML = '';
-            shuffle(cards).forEach((icon, index) => {
+            
+            // Choose source based on mode
+            let source = (currentMode === 'family' && familyImages.length === 8) 
+                         ? familyImages 
+                         : defaultIcons;
+
+            cards = [...source, ...source];
+            shuffle(cards).forEach((content, index) => {
                 const card = document.createElement('div');
                 card.classList.add('card');
-                card.dataset.icon = icon;
-                card.dataset.index = index;
+                card.dataset.value = content;
+                
+                if (currentMode === 'family' && familyImages.length === 8) {
+                    const img = document.createElement('img');
+                    img.src = content;
+                    card.appendChild(img);
+                } else {
+                    const span = document.createElement('span');
+                    span.classList.add('icon-text');
+                    span.textContent = content;
+                    span.style.display = 'none';
+                    card.appendChild(span);
+                }
+
                 card.addEventListener('click', flipCard);
                 grid.appendChild(card);
             });
@@ -103,7 +189,8 @@
         function flipCard() {
             if (flippedCards.length < 2 && !this.classList.contains('flipped')) {
                 this.classList.add('flipped');
-                this.textContent = this.dataset.icon;
+                const content = this.querySelector('.icon-text') || this.querySelector('img');
+                content.style.display = 'block';
                 flippedCards.push(this);
 
                 if (flippedCards.length === 2) {
@@ -116,18 +203,20 @@
 
         function checkMatch() {
             const [card1, card2] = flippedCards;
-            if (card1.dataset.icon === card2.dataset.icon) {
+            if (card1.dataset.value === card2.dataset.value) {
                 card1.classList.add('matched');
                 card2.classList.add('matched');
                 matchedCount += 2;
                 flippedCards = [];
-                if (matchedCount === cards.length) alert('You won in ' + moves + ' moves!');
+                if (matchedCount === cards.length) setTimeout(() => alert('You won!'), 500);
             } else {
                 setTimeout(() => {
                     card1.classList.remove('flipped');
                     card2.classList.remove('flipped');
-                    card1.textContent = '';
-                    card2.textContent = '';
+                    const c1 = card1.querySelector('.icon-text') || card1.querySelector('img');
+                    const c2 = card2.querySelector('.icon-text') || card2.querySelector('img');
+                    c1.style.display = 'none';
+                    c2.style.display = 'none';
                     flippedCards = [];
                 }, 1000);
             }
@@ -136,6 +225,7 @@
         function resetGame() {
             moves = 0;
             matchedCount = 0;
+            flippedCards = [];
             document.getElementById('moves').textContent = moves;
             createBoard();
         }
