@@ -21,15 +21,16 @@
             --primary: #3498db;
             --success: #27ae60;
             --bg: #f0f2f5;
-            --glass: rgba(255, 255, 255, 0.9);
+            --glass: rgba(255, 255, 255, 0.95);
             --card-back: #2c3e50;
         }
 
         body, html {
             margin: 0; padding: 0;
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', system-ui, sans-serif;
             background-color: var(--bg);
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
         /* Intro Screen */
@@ -70,8 +71,25 @@
         .start-btn:hover { transform: scale(1.05); background: #2980b9; }
 
         /* Game Screen */
-        #game-screen { display: none; flex-direction: column; align-items: center; padding: 20px; }
+        #game-screen { display: none; flex-direction: column; align-items: center; padding: 20px; position: relative; }
 
+        /* Overlays (Instructions & Countdown) */
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100; color: white;
+            text-align: center; padding: 20px; box-sizing: border-box;
+        }
+
+        .instruction-box {
+            background: white; color: #333; padding: 30px; border-radius: 20px; max-width: 400px;
+        }
+
+        #countdown-text { font-size: 8rem; font-weight: bold; text-shadow: 0 0 20px rgba(255,255,255,0.5); }
+
+        /* Game UI */
+        .status-msg { margin: 10px 0; font-style: italic; color: #555; height: 1.2rem; }
+        
         .controls {
             background: white; padding: 20px; border-radius: 15px;
             margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
@@ -83,10 +101,11 @@
             gap: 10px; max-width: 400px; width: 100%;
         }
 
+        /* Card Styles */
         .card {
             aspect-ratio: 1 / 1; background-color: var(--card-back);
             border-radius: 8px; cursor: pointer; position: relative;
-            transform-style: preserve-3d; transition: transform 0.5s;
+            transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .card.flipped { transform: rotateY(180deg); }
@@ -103,9 +122,29 @@
 
         .card.matched .card-front { background: var(--success); color: white; }
         .hidden { display: none !important; }
+
+        button.btn-small { padding: 8px 15px; cursor: pointer; border-radius: 5px; border: 1px solid #ddd; background: #fff; }
     </style>
 </head>
 <body>
+
+    <div id="instruction-overlay" class="overlay hidden">
+        <div class="instruction-box">
+            <h2>How to Play</h2>
+            <ul style="text-align: left; line-height: 1.6;">
+                <li>Tap cards to find <strong>matching pairs</strong>.</li>
+                <li>Match all 8 pairs to win.</li>
+                <li>Try to get the lowest move count!</li>
+            </ul>
+            <p><em>Cards will be revealed for 3 seconds first.</em></p>
+            <button class="start-btn" onclick="startCountdown()">Ready, Go!</button>
+        </div>
+    </div>
+
+    <div id="countdown-overlay" class="overlay hidden">
+        <div id="countdown-text">3</div>
+        <p>MEMORIZE THE POSITIONS!</p>
+    </div>
 
     <section id="intro-screen">
         <div class="hero-card">
@@ -115,7 +154,7 @@
                 <div class="mode-box"><h3>🍎 Classic</h3><p>Fruit Emojis</p></div>
                 <div class="mode-box"><h3>📸 Family</h3><p>Your Photos</p></div>
             </div>
-            <button class="start-btn" onclick="showGame()">Play Game</button>
+            <button class="start-btn" onclick="initGame()">Enter Game</button>
         </div>
     </section>
 
@@ -126,11 +165,14 @@
             </div>
             <div id="uploadSection" class="hidden">
                 <input type="file" id="imageUpload" accept="image/*" multiple onchange="processImages(event)">
-                <p style="font-size: 0.75rem;">Upload 8 photos (Saved to browser)</p>
+                <p style="font-size: 0.75rem;">Upload 8 photos (Saved locally)</p>
             </div>
+            <div id="status-text" class="status-msg">Good luck!</div>
             <div style="font-weight: bold;">Moves: <span id="moves">0</span> | Best: <span id="best">--</span></div>
-            <button onclick="resetGame()" style="margin-top:10px;">Reset</button>
-            <button onclick="location.reload()">Home</button>
+            <div style="margin-top: 15px;">
+                <button class="btn-small" onclick="resetGame()">Reset Board</button>
+                <button class="btn-small" onclick="location.reload()">Home Page</button>
+            </div>
         </div>
         <div class="grid" id="gameGrid"></div>
     </section>
@@ -141,37 +183,59 @@
         let flippedCards = [];
         let matchedCount = 0;
         let moves = 0;
-        let isLocked = false;
+        let isLocked = true; // Board locked until countdown ends
 
-        function showGame() {
+        function initGame() {
             document.getElementById('intro-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'flex';
+            document.getElementById('instruction-overlay').classList.remove('hidden');
             updateBestScore();
-            resetGame();
+            createBoard(); // Create board in background
+        }
+
+        function startCountdown() {
+            document.getElementById('instruction-overlay').classList.add('hidden');
+            document.getElementById('countdown-overlay').classList.remove('hidden');
+            
+            // Reveal all cards
+            document.querySelectorAll('.card').forEach(c => c.classList.add('flipped'));
+            
+            let count = 3;
+            const timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    document.getElementById('countdown-text').textContent = count;
+                } else {
+                    clearInterval(timer);
+                    document.getElementById('countdown-overlay').classList.add('hidden');
+                    // Flip back and unlock
+                    document.querySelectorAll('.card').forEach(c => c.classList.remove('flipped'));
+                    isLocked = false;
+                    updateStatus("Find your first pair!");
+                }
+            }, 1000);
         }
 
         function handleModeChange() {
             const isFamily = document.getElementById('modeSwitch').checked;
             document.getElementById('uploadSection').classList.toggle('hidden', !isFamily);
+            if(isFamily && familyImages.length < 8) {
+                updateStatus("Please upload photos to use Family Mode");
+            }
             resetGame();
         }
 
         async function processImages(event) {
             const files = Array.from(event.target.files);
             if (files.length !== 8) return alert("Please select exactly 8 photos.");
-
             familyImages = [];
             const promises = files.map(file => {
                 return new Promise(resolve => {
                     const reader = new FileReader();
-                    reader.onload = (e) => {
-                        familyImages.push(e.target.result);
-                        resolve();
-                    };
+                    reader.onload = (e) => { familyImages.push(e.target.result); resolve(); };
                     reader.readAsDataURL(file);
                 });
             });
-
             await Promise.all(promises);
             localStorage.setItem('familyPics', JSON.stringify(familyImages));
             resetGame();
@@ -198,7 +262,9 @@
             if (isLocked || this.classList.contains('flipped') || this.classList.contains('matched')) return;
             this.classList.add('flipped');
             flippedCards.push(this);
-            if (flippedCards.length === 2) {
+            if (flippedCards.length === 1) {
+                updateStatus("Find the match...");
+            } else if (flippedCards.length === 2) {
                 moves++;
                 document.getElementById('moves').textContent = moves;
                 checkMatch();
@@ -211,8 +277,10 @@
             if (c1.dataset.val === c2.dataset.val) {
                 c1.classList.add('matched'); c2.classList.add('matched');
                 matchedCount += 2; flippedCards = []; isLocked = false;
+                updateStatus("Great job! Found a pair.");
                 if (matchedCount === 16) handleWin();
             } else {
+                updateStatus("Not a match. Try again!");
                 setTimeout(() => {
                     c1.classList.remove('flipped'); c2.classList.remove('flipped');
                     flippedCards = []; isLocked = false;
@@ -221,14 +289,19 @@
         }
 
         function handleWin() {
+            updateStatus("🏆 You've cleared the board!");
             const best = localStorage.getItem('bestScore') || Infinity;
             if (moves < best) {
                 localStorage.setItem('bestScore', moves);
-                alert(`New Record! You won in ${moves} moves.`);
+                alert(`New Record! ${moves} moves.`);
             } else {
                 alert(`Win! Moves: ${moves}`);
             }
             updateBestScore();
+        }
+
+        function updateStatus(txt) {
+            document.getElementById('status-text').textContent = txt;
         }
 
         function updateBestScore() {
@@ -237,9 +310,13 @@
         }
 
         function resetGame() {
-            moves = 0; matchedCount = 0; flippedCards = []; isLocked = false;
+            moves = 0; matchedCount = 0; flippedCards = []; 
             document.getElementById('moves').textContent = "0";
             createBoard();
+            // Ask for instruction again on reset for clarity
+            document.getElementById('instruction-overlay').classList.remove('hidden');
+            isLocked = true;
+            document.getElementById('countdown-text').textContent = "3";
         }
     </script>
 </body>
